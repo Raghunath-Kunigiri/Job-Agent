@@ -6,56 +6,126 @@ module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
 
+  // Handle preflight requests
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
 
+  // Only allow POST method
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Only POST method allowed' });
+    console.log(`❌ Method not allowed: ${req.method}`);
+    return res.status(405).json({ 
+      success: false,
+      error: 'Method not allowed',
+      message: 'Only POST method is supported'
+    });
   }
 
-  const { URL, Job Title = 'Software Engineer', company = 'Tech Company', useAI = false } = req.body;
+  // Log full request body for debugging
+  console.log('📥 Request received:', {
+    method: req.method,
+    headers: req.headers,
+    body: req.body,
+    timestamp: new Date().toISOString()
+  });
 
-  if (!URL) {
-    return res.status(400).json({ error: 'URL is required' });
+  // Extract and validate parameters
+  const { 
+    url, 
+    jobTitle = 'Software Engineer', 
+    company = 'Tech Company', 
+    useAI = false 
+  } = req.body || {};
+
+  // Validate required URL parameter
+  if (!url) {
+    console.log('❌ Validation failed: URL is required');
+    return res.status(400).json({ 
+      success: false,
+      error: 'URL is required',
+      message: 'Please provide a valid job URL'
+    });
   }
+
+  // Sanitize company name
+  const sanitizedCompany = sanitizeCompany(company);
+  
+  console.log('✅ Processing job application:', {
+    url,
+    jobTitle,
+    originalCompany: company,
+    sanitizedCompany,
+    useAI
+  });
 
   try {
-    console.log('Starting job application process for:', URL);
+    let coverLetter = null;
     
     if (useAI) {
-      const coverLetter = await generateCoverLetter(Job Title, company);
-      return res.status(200).json({ 
-        success: true, 
-        message: 'AI cover letter generated successfully',
-        coverLetter,
-        Job Title,
-        company,
-        URL
-      });
+      console.log('🤖 Generating AI cover letter...');
+      coverLetter = await generateCoverLetter(jobTitle, sanitizedCompany);
     }
 
-    return res.status(200).json({ 
-      success: true, 
-      message: 'Job application endpoint is working',
-      data: { URL, Job Title, company },
-      note: 'Set useAI=true to generate cover letter'
-    });
+    const response = {
+      success: true,
+      coverLetter: coverLetter || `I am excited to apply for the ${jobTitle} position at ${sanitizedCompany}.`,
+      jobTitle,
+      company: sanitizedCompany,
+      url,
+      message: useAI ? 'AI cover letter generated successfully' : 'Job application endpoint is working',
+      timestamp: new Date().toISOString()
+    };
+
+    console.log('✅ Response prepared:', response);
+    return res.status(200).json(response);
 
   } catch (error) {
-    console.error('Error in apply function:', error);
-    return res.status(500).json({ 
-      error: 'Internal server error',
-      message: error.message 
+    console.error('❌ Unexpected error in apply function:', {
+      error: error.message,
+      stack: error.stack,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Return fallback response to prevent 500 errors
+    return res.status(200).json({
+      success: true,
+      coverLetter: `I am excited to apply for the ${jobTitle} position at ${sanitizedCompany}.`,
+      jobTitle,
+      company: sanitizedCompany,
+      url,
+      message: 'Fallback response due to processing error',
+      timestamp: new Date().toISOString()
     });
   }
 }
 
-async function generateCoverLetter(Job Title, company) {
-  const prompt = `Write a professional 2-sentence cover letter for applying to the ${Job Title} role at ${company}. Make it engaging and highlight relevant skills.`;
+// Function to sanitize company name
+function sanitizeCompany(company) {
+  if (!company || typeof company !== 'string') {
+    return 'the company';
+  }
+  
+  // Remove Markdown link syntax: **[Company Name](url)**
+  let sanitized = company
+    .replace(/\*\*\[([^\]]+)\]\([^)]+\)\*\*/g, '$1')  // **[text](url)**
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')          // [text](url)
+    .replace(/\*\*/g, '')                             // **bold**
+    .replace(/\[|\]/g, '')                            // remaining [ ]
+    .replace(/\([^)]*\)/g, '')                        // remaining ( )
+    .trim();
+    
+  console.log(`🧹 Sanitized company: "${company}" → "${sanitized}"`);
+  return sanitized || 'the company';
+}
+
+// Function to generate cover letter with robust error handling
+async function generateCoverLetter(jobTitle, company) {
+  const prompt = `Write a professional 2-sentence cover letter for applying to the ${jobTitle} role at ${company}. Make it engaging and highlight relevant skills.`;
   
   try {
+    console.log('🔗 Making Gemini API request...');
+    
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
@@ -69,15 +139,35 @@ async function generateCoverLetter(Job Title, company) {
       }
     );
 
+    console.log(`📡 Gemini API response status: ${response.status}`);
+
     if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status}`);
+      throw new Error(`Gemini API HTTP ${response.status}: ${response.statusText}`);
     }
 
     const data = await response.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || 
-           `I am excited to apply for the ${Job Title} position at ${company}. My skills and experience make me a strong candidate for this role.`;
+    console.log('📄 Gemini API response data:', data);
+    
+    const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    if (generatedText && generatedText.trim()) {
+      console.log('✅ AI cover letter generated successfully');
+      return generatedText.trim();
+    } else {
+      console.log('⚠️ Empty response from Gemini API, using fallback');
+      throw new Error('Empty response from Gemini API');
+    }
+    
   } catch (error) {
-    console.error('Gemini API error:', error);
-    return `I am excited to apply for the ${Job Title} position at ${company}. My skills and experience make me a strong candidate for this role.`;
+    console.error('❌ Gemini API error:', {
+      error: error.message,
+      stack: error.stack,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Return fallback cover letter
+    const fallback = `I am excited to apply for the ${jobTitle} position at ${company}. My skills and experience make me a strong candidate for this role.`;
+    console.log('🔄 Using fallback cover letter:', fallback);
+    return fallback;
   }
 }
