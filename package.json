@@ -1,0 +1,12 @@
+{
+  "name": "job-applier",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "vercel build"
+  },
+  "dependencies": {
+    "@vercel/node": "^3.0.0"
+  }
+}

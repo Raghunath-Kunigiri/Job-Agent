@@ -1,6 +1,4 @@
 // Vercel serverless function for job application
-import { chromium } from 'playwright-core';
-
 export default async function handler(req, res) {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Credentials', true);
@@ -26,16 +24,15 @@ export default async function handler(req, res) {
   try {
     console.log('Starting job application process for:', url);
     
-    // Note: Playwright may have limitations on Vercel
-    // This is a simplified version for demonstration
-    
     if (useAI) {
       const coverLetter = await generateCoverLetter(jobTitle, company);
       return res.status(200).json({ 
         success: true, 
         message: 'AI cover letter generated successfully',
         coverLetter,
-        note: 'Browser automation is limited on Vercel serverless functions'
+        jobTitle,
+        company,
+        url
       });
     }
 
@@ -43,7 +40,7 @@ export default async function handler(req, res) {
       success: true, 
       message: 'Job application endpoint is working',
       data: { url, jobTitle, company },
-      note: 'For full browser automation, use a server with persistent processes'
+      note: 'Set useAI=true to generate cover letter'
     });
 
   } catch (error) {
@@ -56,7 +53,7 @@ export default async function handler(req, res) {
 }
 
 async function generateCoverLetter(jobTitle, company) {
-  const prompt = `Write a professional 2-sentence cover letter for applying to the ${jobTitle} role at ${company}.`;
+  const prompt = `Write a professional 2-sentence cover letter for applying to the ${jobTitle} role at ${company}. Make it engaging and highlight relevant skills.`;
   
   try {
     const response = await fetch(
@@ -71,6 +68,10 @@ async function generateCoverLetter(jobTitle, company) {
         })
       }
     );
+
+    if (!response.ok) {
+      throw new Error(`Gemini API error: ${response.status}`);
+    }
 
     const data = await response.json();
     return data.candidates?.[0]?.content?.parts?.[0]?.text || 
