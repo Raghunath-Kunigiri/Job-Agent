@@ -15,31 +15,31 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: 'Only POST method allowed' });
   }
 
-  const { url, jobTitle = 'Software Engineer', company = 'Tech Company', useAI = false } = req.body;
+  const { URL, Job Title = 'Software Engineer', company = 'Tech Company', useAI = false } = req.body;
 
-  if (!url) {
+  if (!URL) {
     return res.status(400).json({ error: 'URL is required' });
   }
 
   try {
-    console.log('Starting job application process for:', url);
+    console.log('Starting job application process for:', URL);
     
     if (useAI) {
-      const coverLetter = await generateCoverLetter(jobTitle, company);
+      const coverLetter = await generateCoverLetter(Job Title, company);
       return res.status(200).json({ 
         success: true, 
         message: 'AI cover letter generated successfully',
         coverLetter,
-        jobTitle,
+        Job Title,
         company,
-        url
+        URL
       });
     }
 
     return res.status(200).json({ 
       success: true, 
       message: 'Job application endpoint is working',
-      data: { url, jobTitle, company },
+      data: { URL, Job Title, company },
       note: 'Set useAI=true to generate cover letter'
     });
 
@@ -52,8 +52,8 @@ module.exports = async function handler(req, res) {
   }
 }
 
-async function generateCoverLetter(jobTitle, company) {
-  const prompt = `Write a professional 2-sentence cover letter for applying to the ${jobTitle} role at ${company}. Make it engaging and highlight relevant skills.`;
+async function generateCoverLetter(Job Title, company) {
+  const prompt = `Write a professional 2-sentence cover letter for applying to the ${Job Title} role at ${company}. Make it engaging and highlight relevant skills.`;
   
   try {
     const response = await fetch(
@@ -75,9 +75,9 @@ async function generateCoverLetter(jobTitle, company) {
 
     const data = await response.json();
     return data.candidates?.[0]?.content?.parts?.[0]?.text || 
-           `I am excited to apply for the ${jobTitle} position at ${company}. My skills and experience make me a strong candidate for this role.`;
+           `I am excited to apply for the ${Job Title} position at ${company}. My skills and experience make me a strong candidate for this role.`;
   } catch (error) {
     console.error('Gemini API error:', error);
-    return `I am excited to apply for the ${jobTitle} position at ${company}. My skills and experience make me a strong candidate for this role.`;
+    return `I am excited to apply for the ${Job Title} position at ${company}. My skills and experience make me a strong candidate for this role.`;
   }
 }
